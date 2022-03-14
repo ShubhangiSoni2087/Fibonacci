@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy-API and Lambda FunctionName
+Parameters:
+  apiname:
+    Default: custom-api-us-east-1
+    Type: String
+  lambdaname:
+    Type: String
+    Default: custom-function-us-east-1
+Resources:
+  MyLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+        Architectures: [x86_64]
+        FunctionName: !Ref lambdaname
+        MemorySize: 128
+        PackageType: Zip
+        Runtime: python3.8
+        Role: arn:aws:iam::048420978968:role/LambdaRole
+        Handler: index.lambda_handler
+        Code:
+          ZipFile: |
+            from asyncio import events
+            import json, time
+            def fibonacci_index(num):
+                fibo_list = []
+                first_val, sum = 0,0
+                second_val = 1
+                while(sum <= num):
+                    fibo_list.append(sum)
+                    first_val = second_val
+                    second_val = sum
+                    sum = first_val+second_val
+                return fibo_list
+            def lambda_handler(event, context):
+                data = int(event['params']['querystring']['data'])
+                data_list = []
+                if (data==0):
+                    data_list.append(data)
+                    index = fibonacci_index(data)
+                    return{
+                            'statusCode': 200,
+                            json.dumps("{} is a Fibonacci Number. Its the {}th Number in the Fibonacci Series ".format(data,len(index)))
+                        }
+                elif (data>0):
+                    value = [5*data**2+4,5*data**2-4]
+                    for i in range(0,len(value)):
+                        square_root = value[i]**0.5
+                        modulus = square_root % 1
+                        if(modulus==0):
+                            data_list.append(value[i])
+                    if not data_list:
+                        return{
+                            'statusCode': 200,
+                            json.dumps("{} is not a Fibonacci number".format(data))
+                        }
+                    else: 
+                        index = fibonacci_index(data)
+                        return{
+                            'statusCode': 200,
+                            json.dumps("{} is a Fibonacci Number. Its the {}th Number in the Fibonacci Series ".format(data,len(index)))
+                        }
+  myRestAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties: 
+      Name: !Ref apiname 
+      Parameters: 
+         endpointConfigurationTypes: REGIONAL
+  method:
+    Type: AWS::ApiGateway::Method
+    Properties: 
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: ANY
+      Integration: 
+        Type: AWS
+        TimeoutInMillis: 29000
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MyLambdaFunction.Arn}/invocations'
+        IntegrationResponses: 
+          - StatusCode: 200
+      ResourceId: !GetAtt myRestAPI.RootResourceId
+      RestApiId: !Ref myRestAPI
+  myAPIgatewaydeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - "method"
+    Properties: 
+      RestApiId: !Ref myRestAPI
+      StageName: v1
